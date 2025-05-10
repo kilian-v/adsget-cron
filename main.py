@@ -41,5 +41,5 @@ async def hello(request: Request):
 async def cleanup_old_schedules(request: Request):
     verify_token(request)
     threshold_date = datetime.now().date().isoformat()  # e.g., '2025-05-10'
-    supabase.from_("cron_schedule").delete().lt("substring(date_key from '^[0-9]{4}-[0-9]{2}-[0-9]{2}')", threshold_date).execute()
+    supabase.from_("cron_schedule").delete().lt("created_at", threshold_date).execute()
     return {"status": "cleaned"}
