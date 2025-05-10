@@ -62,7 +62,7 @@ async def get_or_create_schedule(category: str, date_key: str, interval_index: i
 async def fetch_all_for_category(category: str):
     async def safe_fetch(fn, name):
         try:
-            return await asyncio.wait_for(fn(category, LIMIT), timeout=300)
+            return await asyncio.wait_for(fn(category, LIMIT), timeout=3600)
         except Exception as e:
             print(f"[ERROR] {name} failed:", e)
             return []
@@ -70,7 +70,6 @@ async def fetch_all_for_category(category: str):
     tasks = [
         safe_fetch(fetch_db1_urls, "DB1"),
         safe_fetch(fetch_db2_image_urls, "DB2"),
-        safe_fetch(fetch_db3_urls, "DB3")
     ]
 
     results = await asyncio.gather(*tasks)
