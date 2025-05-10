@@ -62,7 +62,8 @@ async def get_or_create_schedule(category: str, date_key: str, interval_index: i
 async def fetch_all_for_category(category: str):
     async def safe_fetch(fn, name):
         try:
-            return await asyncio.wait_for(fn(category, LIMIT), timeout=3600)
+            query = "best ads" if category.lower() == "all" else f"{category.lower()} ads"
+            return await asyncio.wait_for(fn(query, LIMIT), timeout=3600)
         except Exception as e:
             print(f"[ERROR] {name} failed:", e)
             return []
