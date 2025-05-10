@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.env
+
+# Editor settings
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Playwright cache and downloads
+playwright/.cache/
+.playwright/
+
+# Logs
+*.log
+
+# Test reports / coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# Environment specific
+.env.*
+*.local

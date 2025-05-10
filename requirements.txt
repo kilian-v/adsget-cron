@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+playwright
+playwright_stealth
+setuptools
+aiohttp
+supabase
+
