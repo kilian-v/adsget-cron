@@ -1,5 +1,7 @@
 import os, asyncio, random, math
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from supabase_client import supabase
 from getter.db1_fetch import fetch_db1_urls
 from getter.db2_fetch import fetch_db2_image_urls
@@ -46,7 +48,7 @@ async def get_or_create_schedule(category: str, date_key: str, interval_index: i
     if res:
         return res.data["run_hour"], res.data["run_minute"]
 
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Africa/Porto-Novo"))
     current_hour = now.hour
     current_minute = now.minute
 
@@ -108,7 +110,7 @@ async def fetch_all_for_category(category: str):
     print(f"[{category}] Total images collected: {total}")
 
 async def run_cron():
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Africa/Porto-Novo"))
     category, date_key, interval_index = get_current_category(now)
 
     if await already_ran(date_key):
@@ -133,7 +135,7 @@ async def run_cron():
 
 
 async def run_cleanup():
-    threshold_date = datetime.now().date().isoformat()  # e.g., '2025-05-10'
+    threshold_date = datetime.now(ZoneInfo("Africa/Porto-Novo")).date().isoformat()  # e.g., '2025-05-10'
     supabase.from_("cron_schedule").delete().lt("created_at", threshold_date).execute()
     return {"status": "cleaned"}
 
