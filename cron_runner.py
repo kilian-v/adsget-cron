@@ -132,4 +132,9 @@ async def run_cron():
     await record_run(date_key, category)
 
 
+async def run_cleanup():
+    threshold_date = datetime.now().date().isoformat()  # e.g., '2025-05-10'
+    supabase.from_("cron_schedule").delete().lt("created_at", threshold_date).execute()
+    return {"status": "cleaned"}
+
 

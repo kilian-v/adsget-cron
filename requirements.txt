@@ -6,4 +6,5 @@ playwright_stealth
 setuptools
 aiohttp
 supabase
+apscheduler
 
