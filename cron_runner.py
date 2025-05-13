@@ -6,15 +6,16 @@ from supabase_client import supabase
 from getter.db1_fetch import fetch_db1_urls
 from getter.db2_fetch import fetch_db2_image_urls
 
+#Max 7
 CATEGORIES  = [
     "All",
-    "Electronics",
-    "Apparel",
-    "Home & Kitchen",
-    "Beauty & Personal Care",
-    "Sports & Outdoors",
-    "Toys & Games",
-    "Books & Media",
+    #"Electronics",
+    #"Apparel",
+    #"Home & Kitchen",
+    #"Beauty & Personal Care",
+    #"Sports & Outdoors",
+    #"Toys & Games",
+    #"Books & Media",
     "Food & Beverage",
     "Health & Wellness",
     "Jewelry & Accessories",
