@@ -142,6 +142,22 @@ def parse_campaign_slugs(html: str) -> list[str]:
     return list(dict.fromkeys(CAMPAIGN_RE.findall(html)))
 
 
+def _unescape_fully(text: str, limit: int = 3) -> str:
+    """Decode HTML entities, repeatedly.
+
+    Ads of the World escapes its titles twice: the page for "Hertz & Health"
+    serves `Hertz &amp;amp; Health`, so a single unescape leaves `&amp;`
+    behind. These strings become search keys in image_queries, where a stray
+    entity means the campaign can never be matched by a user's query.
+    """
+    for _ in range(limit):
+        decoded = html_lib.unescape(text)
+        if decoded == text:
+            break
+        text = decoded
+    return text
+
+
 def parse_campaign_images(html: str) -> tuple[list[str], set[str], set[str]]:
     """Full-size creatives of a campaign page, plus its query terms."""
     images: list[str] = []
@@ -161,7 +177,7 @@ def parse_campaign_images(html: str) -> tuple[list[str], set[str], set[str]]:
     title = TITLE_RE.search(html)
     if title:
         # "Pronaca: A Taste of Art • Ads of the World™ | Part of The Clio Network"
-        clean = html_lib.unescape(title.group(1)).split("•")[0].strip().lower()
+        clean = _unescape_fully(title.group(1)).split("•")[0].strip().lower()
         if clean:
             terms.add(clean)
             if ":" in clean:
