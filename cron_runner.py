@@ -2,9 +2,14 @@ import os, asyncio, random, math
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from supabase_client import supabase
+from supabase_client import supabase, fetch_known_image_urls
+from queries import pick_query, record_query_use
 from getter.db1_fetch import fetch_db1_urls
 from getter.db2_fetch import fetch_db2_image_urls
+from getter.db3_fetch import fetch_db3_urls
+from getter.db4_fetch import fetch_db4_urls
+
+TZ = ZoneInfo("Africa/Porto-Novo")
 
 #Max 7
 CATEGORIES  = [
@@ -20,7 +25,23 @@ CATEGORIES  = [
     "Health & Wellness",
     "Jewelry & Accessories",
 ]
-LIMIT = 50
+# Per-source budget FOR ONE QUERY. A single query yields roughly 10-15 new
+# images before a Playwright source hits max_scrolls and spends minutes for
+# scraps, so asking one query for 50 is wasted wall-clock. Ads of the World is
+# cheap (plain HTTP, ~8s) and gets a bigger share.
+PER_SOURCE_LIMIT = {
+    "DB1": 15,
+    "DB2": 15,
+    "DB3": 15,
+    "DB4": 20,
+}
+
+# Volume now comes from several queries per run instead of one greedy query.
+TARGET_PER_RUN = 60
+MAX_QUERIES_PER_RUN = 4
+
+# Kept for callers that still reference it.
+LIMIT = max(PER_SOURCE_LIMIT.values())
 
 def get_interval_range(index: int) -> tuple[int, int]:
     block_size = math.ceil(24 / len(CATEGORIES))
@@ -36,20 +57,31 @@ def get_current_category(now: datetime) -> tuple[str, str, int]:
     date_key = f"{now.date()}-{category}"
     return category, date_key, index
 
+def _maybe_single(table: str, date_key: str):
+    """maybe_single() returns a truthy response object even with no rows, and
+    raises in some supabase-py versions. Return the row dict, or None."""
+    try:
+        res = supabase.from_(table).select("*").eq("date_key", date_key).maybe_single().execute()
+    except Exception as e:
+        print(f"⚠️ {table} lookup failed for {date_key}: {e}")
+        return None
+    if res and getattr(res, "data", None):
+        return res.data
+    return None
+
 async def already_ran(date_key: str) -> bool:
-    res = supabase.from_("cron_runs").select("*").eq("date_key", date_key).maybe_single().execute()
-    return bool(res)
+    return _maybe_single("cron_runs", date_key) is not None
 
 async def record_run(date_key: str, category: str):
     supabase.from_("cron_runs").insert({"date_key": date_key, "category": category}).execute()
 
 async def get_or_create_schedule(category: str, date_key: str, interval_index: int) -> tuple[int, int]:
     # Check if already exists
-    res = supabase.from_("cron_schedule").select("*").eq("date_key", date_key).maybe_single().execute()
-    if res:
-        return res.data["run_hour"], res.data["run_minute"]
+    row = _maybe_single("cron_schedule", date_key)
+    if row:
+        return row["run_hour"], row["run_minute"]
 
-    now = datetime.now(ZoneInfo("Africa/Porto-Novo"))
+    now = datetime.now(TZ)
     current_hour = now.hour
     current_minute = now.minute
 
@@ -92,26 +124,60 @@ async def get_or_create_schedule(category: str, date_key: str, interval_index: i
     }).execute()
 
     return run_hour, run_minute
-async def fetch_all_for_category(category: str):
-    async def safe_fetch(fn, name):
-        try:
-            query = "best ads" if category.lower() == "all" else f"{category.lower()} ads"
-            return await asyncio.wait_for(fn(query, LIMIT), timeout=3600)
-        except Exception as e:
-            print(f"[ERROR] {name} failed:", e)
-            return []
 
-    tasks = [
-        safe_fetch(fetch_db1_urls, "DB1"),
-        safe_fetch(fetch_db2_image_urls, "DB2"),
-    ]
+SOURCES = (
+    ("DB1", "DB1_NAME", fetch_db1_urls),
+    ("DB2", "DB2_NAME", fetch_db2_image_urls),
+    ("DB3", "DB3_NAME", fetch_db3_urls),
+    ("DB4", "DB4_NAME", fetch_db4_urls),
+)
 
-    results = await asyncio.gather(*tasks)
-    total = sum(len(r) for r in results)
-    print(f"[{category}] Total images collected: {total}")
+
+async def fetch_all_for_category(category: str, save: bool = True) -> int:
+    """Collect new images for a category, across several rotating queries.
+
+    The seen-URL set of each source is loaded ONCE and then shared by every
+    query of the run: it both saves a full table scan per query and lets a
+    later query skip what an earlier one just collected.
+    """
+    seen: dict[str, set[str]] = {}
+    for name, env_name, _ in SOURCES:
+        seen[name] = fetch_known_image_urls(os.getenv(env_name))
+
+    total = 0
+
+    for attempt in range(MAX_QUERIES_PER_RUN):
+        if total >= TARGET_PER_RUN:
+            break
+
+        query = pick_query(category)
+        print(f"🔎 [{category}] query {attempt + 1}/{MAX_QUERIES_PER_RUN}: {query!r}")
+
+        async def safe_fetch(fn, name):
+            try:
+                return await asyncio.wait_for(
+                    fn(query, PER_SOURCE_LIMIT[name], seen_urls=seen[name], save=save),
+                    timeout=3600,
+                )
+            except Exception as e:
+                print(f"[ERROR] {name} failed:", e)
+                return []
+
+        results = await asyncio.gather(
+            *(safe_fetch(fn, name) for name, _, fn in SOURCES)
+        )
+        found = sum(len(r) for r in results)
+        total += found
+        print(f"📊 [{category}] query {attempt + 1}: {found} new — run total {total}/{TARGET_PER_RUN}")
+
+        if save:
+            record_query_use(category, query, found)
+
+    print(f"[{category}] Total NEW images collected: {total}")
+    return total
 
 async def run_cron():
-    now = datetime.now(ZoneInfo("Africa/Porto-Novo"))
+    now = datetime.now(TZ)
     category, date_key, interval_index = get_current_category(now)
 
     if await already_ran(date_key):
@@ -136,8 +202,6 @@ async def run_cron():
 
 
 async def run_cleanup():
-    threshold_date = datetime.now(ZoneInfo("Africa/Porto-Novo")).date().isoformat()  # e.g., '2025-05-10'
+    threshold_date = datetime.now(TZ).date().isoformat()  # e.g., '2025-05-10'
     supabase.from_("cron_schedule").delete().lt("created_at", threshold_date).execute()
     return {"status": "cleaned"}
-
-

@@ -3,18 +3,23 @@ FROM python:3.12-slim
 # Set work directory
 WORKDIR /app
 
-# Install OS dependencies
-RUN apt-get update && apt-get install -y curl wget gnupg2 libglib2.0-0 libnss3 libgconf-2-4 libfontconfig1 libxss1 libasound2 libatk-bridge2.0-0 libcups2 libxrandr2 libgtk-3-0
+# Minimal OS tooling. The browser's own system dependencies are installed by
+# `playwright install --with-deps` below — hand-listing them broke on modern
+# Debian, where libgconf-2-4 no longer exists.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install pip dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Chromium + its system deps. Done before copying the source so that a
+# code change does not re-download the browser on every build.
+RUN playwright install --with-deps chromium
+
 # Copy project files
 COPY . .
-
-# Install playwright + Chromium
-RUN playwright install --with-deps
 
 # Expose port
 EXPOSE 8000
