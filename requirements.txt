@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
-playwright
+playwright==1.65.0
 playwright_stealth
 setuptools
 aiohttp
